@@ -18,6 +18,7 @@ package litellm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,6 +79,35 @@ type KeyInfo struct {
 	Models   []string `json:"models"`
 }
 
+type keyListResponse struct {
+	Keys []KeyInfo `json:"keys"`
+}
+
+func (r *keyListResponse) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Keys []json.RawMessage `json:"keys"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	r.Keys = make([]KeyInfo, 0, len(raw.Keys))
+	for _, item := range raw.Keys {
+		var token string
+		if err := json.Unmarshal(item, &token); err == nil {
+			r.Keys = append(r.Keys, KeyInfo{Token: token})
+			continue
+		}
+
+		var key KeyInfo
+		if err := json.Unmarshal(item, &key); err != nil {
+			return err
+		}
+		r.Keys = append(r.Keys, key)
+	}
+	return nil
+}
+
 type keyService struct {
 	client *httpClient
 }
@@ -104,7 +134,7 @@ func (s *keyService) Get(ctx context.Context, token string) (*KeyInfo, error) {
 }
 
 func (s *keyService) List(ctx context.Context) ([]KeyInfo, error) {
-	var resp []KeyInfo
+	var resp keyListResponse
 	err := s.client.do(ctx, http.MethodGet, "/key/list", nil, &resp)
-	return resp, err
+	return resp.Keys, err
 }

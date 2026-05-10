@@ -65,6 +65,10 @@ type UserInfo struct {
 	Teams     []string `json:"teams"`
 }
 
+type userListResponse struct {
+	Users []UserInfo `json:"users"`
+}
+
 type userService struct {
 	client *httpClient
 }
@@ -91,7 +95,7 @@ func (s *userService) Get(ctx context.Context, userID string) (*UserInfo, error)
 }
 
 func (s *userService) List(ctx context.Context) ([]UserInfo, error) {
-	var resp []UserInfo
+	var resp userListResponse
 	err := s.client.do(ctx, http.MethodGet, "/user/list", nil, &resp)
-	return resp, err
+	return resp.Users, err
 }
