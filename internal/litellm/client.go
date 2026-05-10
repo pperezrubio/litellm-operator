@@ -47,7 +47,7 @@ func NewClient(endpoint, masterKey string) Client {
 	return &httpClient{
 		baseURL:   strings.TrimRight(endpoint, "/"),
 		masterKey: masterKey,
-		http:      &http.Client{Timeout: 30 * time.Second},
+		http:      &http.Client{Timeout: 90 * time.Second},
 	}
 }
 
