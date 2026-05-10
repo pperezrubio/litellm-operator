@@ -18,6 +18,7 @@ package resources
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -114,8 +115,9 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 				},
 			},
 			InitialDelaySeconds: healthCheckInitialDelay(instance, "liveness"),
-			PeriodSeconds:       15,
-			TimeoutSeconds:      5,
+			PeriodSeconds:       livenessPeriodSeconds(instance),
+			TimeoutSeconds:      livenessTimeoutSeconds(instance),
+			FailureThreshold:    livenessFailureThreshold(instance),
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -655,6 +657,27 @@ func startupFailureThreshold(instance *litellmv1alpha1.LiteLLMInstance) int32 {
 	return 30
 }
 
+func livenessPeriodSeconds(instance *litellmv1alpha1.LiteLLMInstance) int32 {
+	if instance.Spec.HealthCheck != nil && instance.Spec.HealthCheck.LivenessPeriodSeconds > 0 {
+		return instance.Spec.HealthCheck.LivenessPeriodSeconds
+	}
+	return 15
+}
+
+func livenessTimeoutSeconds(instance *litellmv1alpha1.LiteLLMInstance) int32 {
+	if instance.Spec.HealthCheck != nil && instance.Spec.HealthCheck.LivenessTimeoutSeconds > 0 {
+		return instance.Spec.HealthCheck.LivenessTimeoutSeconds
+	}
+	return 5
+}
+
+func livenessFailureThreshold(instance *litellmv1alpha1.LiteLLMInstance) int32 {
+	if instance.Spec.HealthCheck != nil && instance.Spec.HealthCheck.LivenessFailureThreshold > 0 {
+		return instance.Spec.HealthCheck.LivenessFailureThreshold
+	}
+	return 3
+}
+
 // guardrailEnvVars injects API keys (and any additional EnvVars) from
 // LiteLLMGuardrail CRs bound to this instance so the proxy can resolve the
 // `os.environ/GUARDRAIL_{NAME}_API_KEY` references in the guardrails
@@ -703,6 +726,17 @@ func credentialEnvVars(instance *litellmv1alpha1.LiteLLMInstance, credentials []
 	if len(credentials) == 0 {
 		return nil
 	}
+	sort.SliceStable(credentials, func(i, j int) bool {
+		left := CredentialEnvVarName(credentials[i].Spec.CredentialName)
+		right := CredentialEnvVarName(credentials[j].Spec.CredentialName)
+		if left != right {
+			return left < right
+		}
+		if credentials[i].Namespace != credentials[j].Namespace {
+			return credentials[i].Namespace < credentials[j].Namespace
+		}
+		return credentials[i].Name < credentials[j].Name
+	})
 	vars := make([]corev1.EnvVar, 0, len(credentials))
 	seen := make(map[string]struct{}, len(credentials))
 	for _, c := range credentials {

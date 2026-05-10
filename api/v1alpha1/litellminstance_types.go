@@ -1011,6 +1011,18 @@ type HealthCheckSpec struct {
 	// +kubebuilder:default=15
 	LivenessInitialDelay int32 `json:"livenessInitialDelay,omitempty"`
 
+	// Liveness probe period in seconds.
+	// +kubebuilder:default=15
+	LivenessPeriodSeconds int32 `json:"livenessPeriodSeconds,omitempty"`
+
+	// Liveness probe timeout in seconds.
+	// +kubebuilder:default=5
+	LivenessTimeoutSeconds int32 `json:"livenessTimeoutSeconds,omitempty"`
+
+	// Liveness probe failure threshold.
+	// +kubebuilder:default=3
+	LivenessFailureThreshold int32 `json:"livenessFailureThreshold,omitempty"`
+
 	// Readiness probe initial delay in seconds.
 	// +kubebuilder:default=10
 	ReadinessInitialDelay int32 `json:"readinessInitialDelay,omitempty"`

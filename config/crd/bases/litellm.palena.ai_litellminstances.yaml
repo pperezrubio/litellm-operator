@@ -894,9 +894,24 @@ spec:
               healthCheck:
                 description: Health check configuration.
                 properties:
+                  livenessFailureThreshold:
+                    default: 3
+                    description: Liveness probe failure threshold.
+                    format: int32
+                    type: integer
                   livenessInitialDelay:
                     default: 15
                     description: Liveness probe initial delay in seconds.
+                    format: int32
+                    type: integer
+                  livenessPeriodSeconds:
+                    default: 15
+                    description: Liveness probe period in seconds.
+                    format: int32
+                    type: integer
+                  livenessTimeoutSeconds:
+                    default: 5
+                    description: Liveness probe timeout in seconds.
                     format: int32
                     type: integer
                   readinessInitialDelay:

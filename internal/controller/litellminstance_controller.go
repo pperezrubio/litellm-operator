@@ -66,6 +66,7 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmguardrails,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps;services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -1026,7 +1027,11 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 		return
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	probeTimeout := 5 * time.Second
+	if instance.Spec.HealthCheck != nil && instance.Spec.HealthCheck.LivenessTimeoutSeconds > 0 {
+		probeTimeout = time.Duration(instance.Spec.HealthCheck.LivenessTimeoutSeconds) * time.Second
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	api := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey)
 
