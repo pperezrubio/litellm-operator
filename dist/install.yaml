@@ -1682,9 +1682,24 @@ spec:
               healthCheck:
                 description: Health check configuration.
                 properties:
+                  livenessFailureThreshold:
+                    default: 3
+                    description: Liveness probe failure threshold.
+                    format: int32
+                    type: integer
                   livenessInitialDelay:
                     default: 15
                     description: Liveness probe initial delay in seconds.
+                    format: int32
+                    type: integer
+                  livenessPeriodSeconds:
+                    default: 15
+                    description: Liveness probe period in seconds.
+                    format: int32
+                    type: integer
+                  livenessTimeoutSeconds:
+                    default: 5
+                    description: Liveness probe timeout in seconds.
                     format: int32
                     type: integer
                   readinessInitialDelay:
@@ -5106,6 +5121,13 @@ rules:
   - update
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
   - apps
   resources:
   - deployments
@@ -5395,7 +5417,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: ghcr.io/palenaai/litellm-operator:v0.11.0
+        image: onedev.tailb4c8de.ts.net/llm-proxy/litellm-operator:v0.11.1-pedro7
         livenessProbe:
           httpGet:
             path: /healthz
@@ -5423,6 +5445,8 @@ spec:
             drop:
             - ALL
         volumeMounts: []
+      imagePullSecrets:
+      - name: onedev-registry
       securityContext:
         runAsNonRoot: true
         seccompProfile:
