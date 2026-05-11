@@ -298,6 +298,13 @@ spec:
               callbacks:
                 description: Callback configuration.
                 properties:
+                  custom:
+                    description: |-
+                      Custom callback instances loaded via LiteLLM's callbacks setting.
+                      Use dotted Python module paths such as "litellm_callbacks.my_custom_logger".
+                    items:
+                      type: string
+                    type: array
                   envVars:
                     description: Environment variables for callback configuration.
                     items:
@@ -418,9 +425,27 @@ spec:
                       - name
                       type: object
                     type: array
+                  failureCallback:
+                    description: Failure callbacks written to litellm_settings.failure_callback.
+                    items:
+                      type: string
+                    type: array
+                  langfuseDefaultTags:
+                    description: Langfuse default tags written to litellm_settings.langfuse_default_tags.
+                    items:
+                      type: string
+                    type: array
+                  successCallback:
+                    description: Success callbacks written to litellm_settings.success_callback.
+                    items:
+                      type: string
+                    type: array
                   types:
-                    description: Callback types to enable (e.g., "langfuse", "otel",
-                      "custom").
+                    description: |-
+                      Callback types to enable (e.g., "langfuse", "otel", "custom").
+                      When SuccessCallback and FailureCallback are not set, these values are
+                      written to both LiteLLM success_callback and failure_callback for
+                      backwards compatibility.
                     items:
                       type: string
                     type: array

@@ -1033,6 +1033,28 @@ func TestBuildDeployment_CustomSSOHandlerConfigMapMount(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_UsesGeneratedConfig(t *testing.T) {
+	instance := newTestInstance()
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+
+	args := dep.Spec.Template.Spec.Containers[0].Args
+	expected := []string{"--config", "/app/proxy_server_config.yaml", "--port", "4000"}
+	if len(args) != len(expected) {
+		t.Fatalf("expected args %v, got %v", expected, args)
+	}
+	for i := range expected {
+		if args[i] != expected[i] {
+			t.Fatalf("expected args %v, got %v", expected, args)
+		}
+	}
+
+	mounts := dep.Spec.Template.Spec.Containers[0].VolumeMounts
+	if len(mounts) == 0 || mounts[0].MountPath != "/app/proxy_server_config.yaml" || mounts[0].SubPath != "proxy_server_config.yaml" {
+		t.Fatalf("expected config file subPath mount at /app/proxy_server_config.yaml, got %v", mounts)
+	}
+}
+
 func TestBuildDeployment_CustomSSOHandlerModuleNoMount(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{

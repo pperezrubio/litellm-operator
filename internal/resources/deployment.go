@@ -101,6 +101,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		Name:            "litellm",
 		Image:           fmt.Sprintf("%s:%s", repo, tag),
 		ImagePullPolicy: pullPolicy,
+		Args:            []string{"--config", "/app/proxy_server_config.yaml", "--port", "4000"},
 		Ports: []corev1.ContainerPort{
 			{Name: "http", ContainerPort: 4000, Protocol: corev1.ProtocolTCP},
 		},
@@ -221,7 +222,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 
 func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName string) []corev1.EnvVar {
 	vars := []corev1.EnvVar{
-		{Name: "LITELLM_CONFIG_DIR", Value: "/app/config"},
+		{Name: "LITELLM_CONFIG_DIR", Value: "/app"},
 		// Required for the /model/new API endpoint used by the LiteLLMModel controller
 		{Name: "STORE_MODEL_IN_DB", Value: "True"},
 	}
@@ -551,7 +552,8 @@ func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volum
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      "config",
-			MountPath: "/app/config",
+			MountPath: "/app/proxy_server_config.yaml",
+			SubPath:   "proxy_server_config.yaml",
 			ReadOnly:  true,
 		},
 		{

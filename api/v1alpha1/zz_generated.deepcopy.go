@@ -313,6 +313,26 @@ func (in *CallbacksSpec) DeepCopyInto(out *CallbacksSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Custom != nil {
+		in, out := &in.Custom, &out.Custom
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.SuccessCallback != nil {
+		in, out := &in.SuccessCallback, &out.SuccessCallback
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.FailureCallback != nil {
+		in, out := &in.FailureCallback, &out.FailureCallback
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.LangfuseDefaultTags != nil {
+		in, out := &in.LangfuseDefaultTags, &out.LangfuseDefaultTags
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.EnvVars != nil {
 		in, out := &in.EnvVars, &out.EnvVars
 		*out = make([]corev1.EnvVar, len(*in))

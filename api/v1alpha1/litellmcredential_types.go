@@ -47,7 +47,7 @@ type LiteLLMCredentialSpec struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 
 	// Additional provider-specific parameters written verbatim into
-	// credential_info alongside api_key / api_base / api_version.
+	// credential_info and credential_values alongside api_key / api_base / api_version.
 	// +optional
 	Params map[string]string `json:"params,omitempty"`
 }

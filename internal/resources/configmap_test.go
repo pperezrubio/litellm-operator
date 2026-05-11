@@ -887,6 +887,42 @@ func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 	}
 }
 
+func TestGenerateProxyConfig_CustomCallbacks(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Callbacks = &litellmv1alpha1.CallbacksSpec{
+		Custom: []string{
+			"litellm_callbacks.my_custom_logger",
+			"litellm_callbacks.my_metrics_logger",
+			"litellm_callbacks.my_debug_trace_logger",
+			"litellm_callbacks.my_quality_signal_logger",
+		},
+		SuccessCallback: []string{"proxy_db", "langfuse"},
+		FailureCallback: []string{"proxy_db", "langfuse"},
+		LangfuseDefaultTags: []string{
+			"cache_hit",
+			"user_api_key_alias",
+			"user_api_key_user_id",
+			"user_api_key_team_alias",
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if callbacks := ls["callbacks"].([]string); len(callbacks) != 4 || callbacks[0] != "litellm_callbacks.my_custom_logger" {
+		t.Errorf("unexpected callbacks: %v", callbacks)
+	}
+	if success := ls["success_callback"].([]string); len(success) != 2 || success[1] != "langfuse" {
+		t.Errorf("unexpected success callbacks: %v", success)
+	}
+	if failure := ls["failure_callback"].([]string); len(failure) != 2 || failure[1] != "langfuse" {
+		t.Errorf("unexpected failure callbacks: %v", failure)
+	}
+	if tags := ls["langfuse_default_tags"].([]string); len(tags) != 4 || tags[0] != "cache_hit" {
+		t.Errorf("unexpected langfuse tags: %v", tags)
+	}
+}
+
 func strPtr(s string) *string { return &s }
 
 func TestGenerateProxyConfig_GlobalBudget(t *testing.T) {
@@ -1146,8 +1182,11 @@ func TestGenerateProxyConfig_CredentialListSingleCredential(t *testing.T) {
 	if entries[0]["credential_name"] != "openai-prod" {
 		t.Errorf("expected credential_name=openai-prod, got %v", entries[0]["credential_name"])
 	}
-	info, ok := entries[0]["credential_info"].(map[string]interface{})
+	info, ok := entries[0]["credential_values"].(map[string]interface{})
 	if !ok {
+		t.Fatal("credential_values should be a map")
+	}
+	if _, ok := entries[0]["credential_info"].(map[string]interface{}); !ok {
 		t.Fatal("credential_info should be a map")
 	}
 	if info["api_key"] != "os.environ/CREDENTIAL_OPENAI_PROD_API_KEY" {
@@ -1181,7 +1220,7 @@ func TestGenerateProxyConfig_CredentialListWithAPIBaseAndParams(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
-	info, _ := entries[0]["credential_info"].(map[string]interface{})
+	info, _ := entries[0]["credential_values"].(map[string]interface{})
 
 	if info["api_base"] != "https://azure-east.openai.azure.com" {
 		t.Errorf("api_base was overridden by params: %v", info["api_base"])

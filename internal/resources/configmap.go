@@ -92,11 +92,7 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		buildSSOConfig(instance.Spec.SSO, config)
 	}
 
-	if instance.Spec.Callbacks != nil && len(instance.Spec.Callbacks.Types) > 0 {
-		ls := ensureLiteLLMSettings(config)
-		ls["success_callback"] = instance.Spec.Callbacks.Types
-		ls["failure_callback"] = instance.Spec.Callbacks.Types
-	}
+	buildCallbacksConfig(instance.Spec.Callbacks, config)
 
 	if instance.Spec.Caching != nil && instance.Spec.Caching.Enabled {
 		buildCachingConfig(instance, config)
@@ -164,6 +160,35 @@ func ensureGeneralSettings(config map[string]interface{}) map[string]interface{}
 		config["general_settings"] = gs
 	}
 	return gs
+}
+
+func buildCallbacksConfig(spec *litellmv1alpha1.CallbacksSpec, config map[string]interface{}) {
+	if spec == nil {
+		return
+	}
+	ls := ensureLiteLLMSettings(config)
+	if len(spec.Custom) > 0 {
+		ls["callbacks"] = spec.Custom
+	}
+	if len(spec.LangfuseDefaultTags) > 0 {
+		ls["langfuse_default_tags"] = spec.LangfuseDefaultTags
+	}
+
+	successCallbacks := spec.SuccessCallback
+	if len(successCallbacks) == 0 {
+		successCallbacks = spec.Types
+	}
+	if len(successCallbacks) > 0 {
+		ls["success_callback"] = successCallbacks
+	}
+
+	failureCallbacks := spec.FailureCallback
+	if len(failureCallbacks) == 0 {
+		failureCallbacks = spec.Types
+	}
+	if len(failureCallbacks) > 0 {
+		ls["failure_callback"] = failureCallbacks
+	}
 }
 
 // buildGeneralSettings serializes GeneralSettingsSpec into the map LiteLLM
@@ -398,8 +423,9 @@ func buildCredentialList(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 			info[k] = v
 		}
 		entries = append(entries, map[string]interface{}{
-			"credential_name": c.Spec.CredentialName,
-			"credential_info": info,
+			"credential_name":   c.Spec.CredentialName,
+			"credential_info":   info,
+			"credential_values": info,
 		})
 	}
 	if len(entries) > 0 {

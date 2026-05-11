@@ -1049,8 +1049,28 @@ type PDBSpec struct {
 // CallbacksSpec defines callback configuration.
 type CallbacksSpec struct {
 	// Callback types to enable (e.g., "langfuse", "otel", "custom").
+	// When SuccessCallback and FailureCallback are not set, these values are
+	// written to both LiteLLM success_callback and failure_callback for
+	// backwards compatibility.
 	// +optional
 	Types []string `json:"types,omitempty"`
+
+	// Custom callback instances loaded via LiteLLM's callbacks setting.
+	// Use dotted Python module paths such as "litellm_callbacks.my_custom_logger".
+	// +optional
+	Custom []string `json:"custom,omitempty"`
+
+	// Success callbacks written to litellm_settings.success_callback.
+	// +optional
+	SuccessCallback []string `json:"successCallback,omitempty"`
+
+	// Failure callbacks written to litellm_settings.failure_callback.
+	// +optional
+	FailureCallback []string `json:"failureCallback,omitempty"`
+
+	// Langfuse default tags written to litellm_settings.langfuse_default_tags.
+	// +optional
+	LangfuseDefaultTags []string `json:"langfuseDefaultTags,omitempty"`
 
 	// Environment variables for callback configuration.
 	// +optional

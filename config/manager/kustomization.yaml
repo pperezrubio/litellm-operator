@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: onedev.tailb4c8de.ts.net/llm-proxy/litellm-operator
-  newTag: v0.11.1-pedro7
+  newTag: v0.11.1-pedro13
