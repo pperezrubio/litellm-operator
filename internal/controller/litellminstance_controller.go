@@ -1073,9 +1073,9 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 			"LiteLLM instance is healthy again")
 	}
 
-	// Redis status: only set if Redis is configured on the spec; otherwise
+	// Redis status: only set if Redis is enabled on the spec; otherwise
 	// an absent RedisStatus is the correct signal ("not applicable").
-	if instance.Spec.Redis != nil {
+	if instance.Spec.Redis != nil && instance.Spec.Redis.Enabled {
 		prevConnected := instance.Status.Redis != nil && instance.Status.Redis.Connected
 		instance.Status.Redis = &litellmv1alpha1.RedisStatus{
 			Connected: readiness.RedisConnected,
@@ -1105,6 +1105,9 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 					"Redis connection lost")
 			}
 		}
+	} else {
+		instance.Status.Redis = nil
+		meta.RemoveStatusCondition(&instance.Status.Conditions, ConditionRedisReady)
 	}
 }
 
