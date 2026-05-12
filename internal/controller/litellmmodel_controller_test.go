@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,6 +33,44 @@ import (
 )
 
 var _ = Describe("LiteLLMModel Controller", func() {
+	Describe("model adoption helpers", func() {
+		It("filters models by name and picks a deterministic order", func() {
+			models := []litellm.ModelInfoResponse{
+				{ModelID: "model-b", ModelName: "gpt-4"},
+				{ModelID: "ignored", ModelName: "gpt-3.5"},
+				{ModelID: "model-a", ModelName: "gpt-4"},
+				{ModelID: "", ModelName: "gpt-4"},
+			}
+
+			matches := modelsByName(models, "gpt-4")
+
+			Expect(matches).To(Equal([]litellm.ModelInfoResponse{
+				{ModelID: "model-a", ModelName: "gpt-4"},
+				{ModelID: "model-b", ModelName: "gpt-4"},
+			}))
+		})
+
+		It("deletes duplicate model IDs while keeping the desired model", func() {
+			mockClient := litellm.NewMockClient()
+			deleted := []string{}
+			mockClient.MockModels.DeleteFunc = func(ctx context.Context, modelID string) error {
+				deleted = append(deleted, modelID)
+				return nil
+			}
+
+			err := deleteDuplicateModels(context.Background(), mockClient, "model-a", []litellm.ModelInfoResponse{
+				{ModelID: "model-a", ModelName: "gpt-4"},
+				{ModelID: "model-b", ModelName: "gpt-4"},
+				{ModelID: "", ModelName: "gpt-4"},
+				{ModelID: "model-c", ModelName: "gpt-4"},
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			slices.Sort(deleted)
+			Expect(deleted).To(Equal([]string{"model-b", "model-c"}))
+		})
+	})
+
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-model"
 		ctx := context.Background()

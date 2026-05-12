@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -180,13 +181,45 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		}
 	}
 
+	existingModels, err := apiClient.Models().List(ctx)
+	if err != nil {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("list models before reconcile: %w", err)
+	}
+	matchingModels := modelsByName(existingModels, model.Spec.ModelName)
+
 	if model.Status.LiteLLMModelID == "" {
-		resp, err := apiClient.Models().Create(ctx, req)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("create model: %w", err)
+		if len(matchingModels) > 0 {
+			model.Status.LiteLLMModelID = matchingModels[0].ModelID
+			model.Status.Synced = true
+			log.Info("adopted existing model", "modelId", model.Status.LiteLLMModelID)
+			emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonUpdated,
+				"Model %q adopted existing LiteLLM registration (id=%s)", model.Spec.ModelName, model.Status.LiteLLMModelID)
+		} else {
+			resp, err := apiClient.Models().Create(ctx, req)
+			if err != nil {
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("create model: %w", err)
+			}
+			model.Status.LiteLLMModelID = resp.ModelID
+			model.Status.Synced = true
+			matchingModels = []litellm.ModelInfoResponse{{ModelID: resp.ModelID, ModelName: model.Spec.ModelName}}
+			log.Info("created model", "modelId", resp.ModelID)
+			emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonCreated,
+				"Model %q registered with LiteLLM (id=%s)", model.Spec.ModelName, resp.ModelID)
 		}
-		model.Status.LiteLLMModelID = resp.ModelID
-		model.Status.Synced = true
+
+		if err := deleteDuplicateModels(ctx, apiClient, model.Status.LiteLLMModelID, matchingModels); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		req.ModelID = model.Status.LiteLLMModelID
+		if req.ModelInfo == nil {
+			req.ModelInfo = &litellm.ModelInfoReq{}
+		}
+		req.ModelInfo.ID = model.Status.LiteLLMModelID
+		if err := apiClient.Models().Update(ctx, req); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update adopted model: %w", err)
+		}
+
 		// Persist status first so re-queued reconciliations see the model ID
 		if err := r.Status().Update(ctx, model); err != nil {
 			return ctrl.Result{}, fmt.Errorf("update status after create: %w", err)
@@ -198,10 +231,11 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		if err := r.Update(ctx, model); err != nil {
 			return ctrl.Result{}, err
 		}
-		log.Info("created model", "modelId", resp.ModelID)
-		emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonCreated,
-			"Model %q registered with LiteLLM (id=%s)", model.Spec.ModelName, resp.ModelID)
 	} else {
+		if err := deleteDuplicateModels(ctx, apiClient, model.Status.LiteLLMModelID, matchingModels); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
 		currentHash := computeSpecHash(model.Spec)
 		if model.Annotations[AnnotationSyncHash] != currentHash {
 			req.ModelID = model.Status.LiteLLMModelID
@@ -234,6 +268,37 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 	now := metav1.Now()
 	model.Status.LastSyncTime = &now
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+func modelsByName(models []litellm.ModelInfoResponse, modelName string) []litellm.ModelInfoResponse {
+	matches := make([]litellm.ModelInfoResponse, 0, len(models))
+	for _, model := range models {
+		if model.ModelName == modelName && model.ModelID != "" {
+			matches = append(matches, model)
+		}
+	}
+	slices.SortFunc(matches, func(a, b litellm.ModelInfoResponse) int {
+		if a.ModelID < b.ModelID {
+			return -1
+		}
+		if a.ModelID > b.ModelID {
+			return 1
+		}
+		return 0
+	})
+	return matches
+}
+
+func deleteDuplicateModels(ctx context.Context, apiClient litellm.Client, desiredModelID string, models []litellm.ModelInfoResponse) error {
+	for _, model := range models {
+		if model.ModelID == "" || model.ModelID == desiredModelID {
+			continue
+		}
+		if err := apiClient.Models().Delete(ctx, model.ModelID); err != nil {
+			return fmt.Errorf("delete duplicate model %q: %w", model.ModelID, err)
+		}
+	}
+	return nil
 }
 
 // updateModelHealth asks the LiteLLM proxy for its /health report and
