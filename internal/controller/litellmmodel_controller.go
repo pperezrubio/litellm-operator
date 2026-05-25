@@ -260,10 +260,11 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		}
 	}
 
-	// Poll /health to report operand health into model status. Failure is
-	// non-fatal — the model sync is still considered successful even if the
-	// health endpoint is slow or unreachable on this reconcile.
-	r.updateModelHealth(ctx, apiClient, model)
+	// Do not poll LiteLLM /health here: that endpoint actively tests every
+	// configured provider deployment and can burn real provider quota on every
+	// model reconcile. Keep model health unknown unless a separate health
+	// controller with explicit cadence is added.
+	model.Status.Health = "unknown"
 
 	now := metav1.Now()
 	model.Status.LastSyncTime = &now
