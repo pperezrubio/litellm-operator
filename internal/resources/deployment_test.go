@@ -54,6 +54,76 @@ func newTestInstance() *litellmv1alpha1.LiteLLMInstance {
 	}
 }
 
+func TestBuildDeployment_DefaultSecurityContextRestrictedFields(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	podSC := dep.Spec.Template.Spec.SecurityContext
+	if podSC == nil || podSC.SeccompProfile == nil || podSC.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+		t.Fatalf("expected pod seccompProfile RuntimeDefault, got %#v", podSC)
+	}
+
+	containerSC := dep.Spec.Template.Spec.Containers[0].SecurityContext
+	if containerSC == nil {
+		t.Fatal("expected container securityContext")
+	}
+	if containerSC.AllowPrivilegeEscalation == nil || *containerSC.AllowPrivilegeEscalation {
+		t.Fatalf("expected allowPrivilegeEscalation=false, got %#v", containerSC.AllowPrivilegeEscalation)
+	}
+	if containerSC.Capabilities == nil || len(containerSC.Capabilities.Drop) != 1 || containerSC.Capabilities.Drop[0] != corev1.Capability("ALL") {
+		t.Fatalf("expected capabilities.drop=[ALL], got %#v", containerSC.Capabilities)
+	}
+	if containerSC.RunAsNonRoot != nil {
+		t.Fatalf("did not expect container runAsNonRoot without spec.security.runAsNonRoot, got %#v", containerSC.RunAsNonRoot)
+	}
+}
+
+func TestBuildDeployment_RunAsNonRootWithCustomImageDoesNotPinUID(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Image.Repository = "registry.example.com/custom/litellm"
+	nonRoot := true
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{RunAsNonRoot: &nonRoot}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	podSC := dep.Spec.Template.Spec.SecurityContext
+	if podSC.RunAsNonRoot == nil || !*podSC.RunAsNonRoot {
+		t.Fatalf("expected pod runAsNonRoot=true, got %#v", podSC.RunAsNonRoot)
+	}
+	if podSC.RunAsUser != nil || podSC.FSGroup != nil {
+		t.Fatalf("custom images should keep their image user, got runAsUser=%#v fsGroup=%#v", podSC.RunAsUser, podSC.FSGroup)
+	}
+
+	containerSC := dep.Spec.Template.Spec.Containers[0].SecurityContext
+	if containerSC.RunAsNonRoot == nil || !*containerSC.RunAsNonRoot {
+		t.Fatalf("expected container runAsNonRoot=true, got %#v", containerSC.RunAsNonRoot)
+	}
+}
+
+func TestBuildDeployment_RunAsNonRootDefaultImagePinsNobody(t *testing.T) {
+	instance := newTestInstance()
+	nonRoot := true
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{RunAsNonRoot: &nonRoot}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	if dep.Spec.Template.Spec.Containers[0].Image != nonRootImageRepo+":main-latest" {
+		t.Fatalf("expected official non-root image, got %q", dep.Spec.Template.Spec.Containers[0].Image)
+	}
+
+	podSC := dep.Spec.Template.Spec.SecurityContext
+	if podSC.RunAsUser == nil || *podSC.RunAsUser != 65534 {
+		t.Fatalf("expected runAsUser=65534, got %#v", podSC.RunAsUser)
+	}
+	if podSC.FSGroup == nil || *podSC.FSGroup != 65534 {
+		t.Fatalf("expected fsGroup=65534, got %#v", podSC.FSGroup)
+	}
+}
+
 func TestBuildDeployment_WithLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}

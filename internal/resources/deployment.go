@@ -46,15 +46,33 @@ const (
 	customSSOMountDir = "/app/custom_sso_handlers"
 )
 
-func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
+func podSecurityContext(nonRoot bool, pinNonRootUser bool) *corev1.PodSecurityContext {
+	sc := &corev1.PodSecurityContext{
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
 	if nonRoot {
-		return &corev1.PodSecurityContext{
-			RunAsNonRoot: boolPtr(true),
-			RunAsUser:    int64Ptr(65534),
-			FSGroup:      int64Ptr(65534),
+		sc.RunAsNonRoot = boolPtr(true)
+		if pinNonRootUser {
+			sc.RunAsUser = int64Ptr(65534)
+			sc.FSGroup = int64Ptr(65534)
 		}
 	}
-	return &corev1.PodSecurityContext{}
+	return sc
+}
+
+func litellmContainerSecurityContext(nonRoot bool) *corev1.SecurityContext {
+	sc := &corev1.SecurityContext{
+		AllowPrivilegeEscalation: boolPtr(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	}
+	if nonRoot {
+		sc.RunAsNonRoot = boolPtr(true)
+	}
+	return sc
 }
 
 // BuildDeployment creates the LiteLLM Deployment.
@@ -141,10 +159,8 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 			PeriodSeconds:    5,
 			FailureThreshold: startupFailureThreshold(instance),
 		},
-		SecurityContext: &corev1.SecurityContext{
-			AllowPrivilegeEscalation: boolPtr(false),
-		},
 	}
+	container.SecurityContext = litellmContainerSecurityContext(nonRoot)
 
 	if instance.Spec.Resources != nil {
 		container.Resources = *instance.Spec.Resources
@@ -207,7 +223,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 					ImagePullSecrets:   imagePullSecrets,
 					Containers:         []corev1.Container{container},
 					Volumes:            buildVolumes(instance),
-					SecurityContext:    podSecurityContext(nonRoot),
+					SecurityContext:    podSecurityContext(nonRoot, repo == nonRootImageRepo),
 				},
 			},
 		},
