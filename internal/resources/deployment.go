@@ -35,6 +35,10 @@ const (
 	defaultImageRepo = "ghcr.io/berriai/litellm"
 	// nonRootImageRepo is the official non-root LiteLLM image (runs as nobody:65534).
 	nonRootImageRepo = "ghcr.io/berriai/litellm-non_root"
+	// officialNonRootUserID is the UID used by the official non-root LiteLLM image.
+	officialNonRootUserID int64 = 65534
+	// customNonRootUserID is the UID used by the homelab custom LiteLLM image.
+	customNonRootUserID int64 = 65532
 	// volumeNameColorTheme is the volume name for the Admin UI color theme ConfigMap.
 	volumeNameColorTheme = "color-theme"
 	// volumeNameCustomSSO is the volume name for the custom SSO handler ConfigMap.
@@ -46,7 +50,14 @@ const (
 	customSSOMountDir = "/app/custom_sso_handlers"
 )
 
-func podSecurityContext(nonRoot bool, pinNonRootUser bool) *corev1.PodSecurityContext {
+func nonRootUserID(repo string) int64 {
+	if repo == nonRootImageRepo {
+		return officialNonRootUserID
+	}
+	return customNonRootUserID
+}
+
+func podSecurityContext(nonRoot bool, runAsUser int64) *corev1.PodSecurityContext {
 	sc := &corev1.PodSecurityContext{
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
@@ -54,10 +65,9 @@ func podSecurityContext(nonRoot bool, pinNonRootUser bool) *corev1.PodSecurityCo
 	}
 	if nonRoot {
 		sc.RunAsNonRoot = boolPtr(true)
-		if pinNonRootUser {
-			sc.RunAsUser = int64Ptr(65534)
-			sc.FSGroup = int64Ptr(65534)
-		}
+		sc.RunAsUser = int64Ptr(runAsUser)
+		sc.RunAsGroup = int64Ptr(runAsUser)
+		sc.FSGroup = int64Ptr(runAsUser)
 	}
 	return sc
 }
@@ -223,7 +233,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 					ImagePullSecrets:   imagePullSecrets,
 					Containers:         []corev1.Container{container},
 					Volumes:            buildVolumes(instance),
-					SecurityContext:    podSecurityContext(nonRoot, repo == nonRootImageRepo),
+					SecurityContext:    podSecurityContext(nonRoot, nonRootUserID(repo)),
 				},
 			},
 		},

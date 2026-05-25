@@ -111,7 +111,7 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 							SecurityContext: litellmContainerSecurityContext(nonRoot),
 						},
 					},
-					SecurityContext: podSecurityContext(nonRoot, repo == nonRootImageRepo),
+					SecurityContext: podSecurityContext(nonRoot, nonRootUserID(repo)),
 				},
 			},
 		},

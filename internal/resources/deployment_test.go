@@ -80,7 +80,7 @@ func TestBuildDeployment_DefaultSecurityContextRestrictedFields(t *testing.T) {
 	}
 }
 
-func TestBuildDeployment_RunAsNonRootWithCustomImageDoesNotPinUID(t *testing.T) {
+func TestBuildDeployment_RunAsNonRootWithCustomImagePinsHomelabUID(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Image.Repository = "registry.example.com/custom/litellm"
 	nonRoot := true
@@ -93,8 +93,14 @@ func TestBuildDeployment_RunAsNonRootWithCustomImageDoesNotPinUID(t *testing.T) 
 	if podSC.RunAsNonRoot == nil || !*podSC.RunAsNonRoot {
 		t.Fatalf("expected pod runAsNonRoot=true, got %#v", podSC.RunAsNonRoot)
 	}
-	if podSC.RunAsUser != nil || podSC.FSGroup != nil {
-		t.Fatalf("custom images should keep their image user, got runAsUser=%#v fsGroup=%#v", podSC.RunAsUser, podSC.FSGroup)
+	if podSC.RunAsUser == nil || *podSC.RunAsUser != customNonRootUserID {
+		t.Fatalf("expected runAsUser=%d, got %#v", customNonRootUserID, podSC.RunAsUser)
+	}
+	if podSC.RunAsGroup == nil || *podSC.RunAsGroup != customNonRootUserID {
+		t.Fatalf("expected runAsGroup=%d, got %#v", customNonRootUserID, podSC.RunAsGroup)
+	}
+	if podSC.FSGroup == nil || *podSC.FSGroup != customNonRootUserID {
+		t.Fatalf("expected fsGroup=%d, got %#v", customNonRootUserID, podSC.FSGroup)
 	}
 
 	containerSC := dep.Spec.Template.Spec.Containers[0].SecurityContext
@@ -116,10 +122,13 @@ func TestBuildDeployment_RunAsNonRootDefaultImagePinsNobody(t *testing.T) {
 	}
 
 	podSC := dep.Spec.Template.Spec.SecurityContext
-	if podSC.RunAsUser == nil || *podSC.RunAsUser != 65534 {
+	if podSC.RunAsUser == nil || *podSC.RunAsUser != officialNonRootUserID {
 		t.Fatalf("expected runAsUser=65534, got %#v", podSC.RunAsUser)
 	}
-	if podSC.FSGroup == nil || *podSC.FSGroup != 65534 {
+	if podSC.RunAsGroup == nil || *podSC.RunAsGroup != officialNonRootUserID {
+		t.Fatalf("expected runAsGroup=65534, got %#v", podSC.RunAsGroup)
+	}
+	if podSC.FSGroup == nil || *podSC.FSGroup != officialNonRootUserID {
 		t.Fatalf("expected fsGroup=65534, got %#v", podSC.FSGroup)
 	}
 }
