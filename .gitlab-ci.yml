@@ -1,0 +1,35 @@
+stages:
+  - build
+
+variables:
+  DOCKERFILE: Dockerfile
+  KANIKO_VERSION: "v1.23.2"
+  INTERNAL_REGISTRY: "gitlab-registry.gitlab.svc.cluster.local:5000"
+
+build-image:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:${KANIKO_VERSION}-debug
+    entrypoint: [""]
+  before_script:
+    - mkdir -p /kaniko
+    - echo "{\"auths\":{\"${INTERNAL_REGISTRY}\":{\"username\":\"${CI_REGISTRY_USER}\",\"password\":\"${CI_REGISTRY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
+  script:
+    - INTERNAL_IMAGE="${INTERNAL_REGISTRY}/${CI_PROJECT_PATH}"
+    - |
+      /kaniko/executor \
+        --dockerfile=${DOCKERFILE} \
+        --context=${CI_PROJECT_DIR} \
+        --build-arg=TARGETOS=linux \
+        --build-arg=TARGETARCH=amd64 \
+        --destination=${INTERNAL_IMAGE}:${CI_COMMIT_SHORT_SHA} \
+        --destination=${INTERNAL_IMAGE}:latest \
+        --cache=true \
+        --cache-repo=${INTERNAL_IMAGE}/cache \
+        --cache-ttl=168h \
+        --insecure \
+        --insecure-pull
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  tags:
+    - kubernetes

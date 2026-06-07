@@ -188,6 +188,34 @@ func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_ProxyConfigHashChangesWithGeneratedConfig(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+
+	depWithoutCallback := BuildDeployment(instance, labels, "", nil, nil)
+	hashWithoutCallback := depWithoutCallback.Spec.Template.Annotations["litellm.palena.ai/config-hash"]
+	if hashWithoutCallback == "" {
+		t.Fatal("expected generated proxy config hash annotation")
+	}
+
+	instance.Spec.Callbacks = &litellmv1alpha1.CallbacksSpec{
+		Custom: []string{"prometheus"},
+	}
+	depWithCallback := BuildDeployment(instance, labels, "", nil, nil)
+	hashWithCallback := depWithCallback.Spec.Template.Annotations["litellm.palena.ai/config-hash"]
+	if hashWithCallback == "" {
+		t.Fatal("expected generated proxy config hash annotation after callback change")
+	}
+	if hashWithoutCallback == hashWithCallback {
+		t.Fatalf("expected proxy config hash to change after callback config change, got %q", hashWithCallback)
+	}
+
+	depWithSameCallback := BuildDeployment(instance, labels, "", nil, nil)
+	if hashWithCallback != depWithSameCallback.Spec.Template.Annotations["litellm.palena.ai/config-hash"] {
+		t.Fatal("expected proxy config hash to be deterministic for unchanged config")
+	}
+}
+
 func TestBuildDeployment_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}

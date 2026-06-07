@@ -17,6 +17,8 @@ limitations under the License.
 package resources
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -26,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/yaml"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 )
@@ -48,6 +51,9 @@ const (
 	// is the last path segment, so LiteLLM imports handlers as
 	// "custom_sso_handlers.<stem>.<function>".
 	customSSOMountDir = "/app/custom_sso_handlers"
+	// annotationConfigHash records the generated proxy config hash on the
+	// pod template, forcing a rollout when proxy_server_config.yaml changes.
+	annotationConfigHash = "litellm.palena.ai/config-hash"
 )
 
 func nonRootUserID(repo string) int64 {
@@ -227,6 +233,9 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
+					Annotations: map[string]string{
+						annotationConfigHash: proxyConfigHash(instance, credentials, guardrails),
+					},
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Name,
@@ -244,6 +253,15 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	}
 
 	return dep
+}
+
+func proxyConfigHash(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) string {
+	configYAML, err := yaml.Marshal(GenerateProxyConfig(instance, credentials, guardrails))
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(configYAML)
+	return hex.EncodeToString(sum[:])
 }
 
 func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName string) []corev1.EnvVar {
