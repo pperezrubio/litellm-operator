@@ -24,9 +24,7 @@ build-image:
         --build-arg=TARGETARCH=amd64 \
         --destination=${INTERNAL_IMAGE}:${CI_COMMIT_SHORT_SHA} \
         --destination=${INTERNAL_IMAGE}:latest \
-        --cache=true \
-        --cache-repo=${INTERNAL_IMAGE}/cache \
-        --cache-ttl=168h \
+        --cache=false \
         --insecure \
         --insecure-pull
   rules:
