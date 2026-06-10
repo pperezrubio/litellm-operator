@@ -4,7 +4,7 @@ stages:
 variables:
   DOCKERFILE: Dockerfile
   KANIKO_VERSION: "v1.23.2"
-  INTERNAL_REGISTRY: "gitlab-registry.gitlab.svc.cluster.local:5000"
+  INTERNAL_REGISTRY: "$FORGEJO_REGISTRY_URL"
 
 build-image:
   stage: build
@@ -12,8 +12,21 @@ build-image:
     name: gcr.io/kaniko-project/executor:${KANIKO_VERSION}-debug
     entrypoint: [""]
   before_script:
-    - mkdir -p /kaniko
-    - echo "{\"auths\":{\"${INTERNAL_REGISTRY}\":{\"username\":\"${CI_REGISTRY_USER}\",\"password\":\"${CI_REGISTRY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
+    - mkdir -p /kaniko/.docker
+  before_script:
+      - mkdir -p /kaniko/.docker
+      - |
+        cat > /kaniko/.docker/config.json <<JSONEOF
+        {
+          "auths": {
+            "$FORGEJO_REGISTRY_URL": {
+              "username": "$FORGEJO_REGISTRY_USER",
+              "password": "$FORGEJO_REGISTRY_PASS"
+            }
+          }
+        }
+        JSONEOF
+      - echo "$FORGEJO_REGISTRY_CA" >> /kaniko/ssl/certs/ca-certificates.crt
   script:
     - INTERNAL_IMAGE="${INTERNAL_REGISTRY}/${CI_PROJECT_PATH}"
     - |
@@ -22,11 +35,11 @@ build-image:
         --context=${CI_PROJECT_DIR} \
         --build-arg=TARGETOS=linux \
         --build-arg=TARGETARCH=amd64 \
-        --destination=${INTERNAL_IMAGE}:${CI_COMMIT_SHORT_SHA} \
-        --destination=${INTERNAL_IMAGE}:latest \
+        --destination=${FORGEJO_REGISTRY_URL}/pedro/homelab-images/litellm-operator:${CI_COMMIT_SHORT_SHA} \
+        --destination=${FORGEJO_REGISTRY_URL}/pedro/homelab-images/litellm-operator:latest \
         --cache=false \
-        --insecure \
-        --insecure-pull
+        \
+       -pull
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   tags:
