@@ -2,40 +2,81 @@ stages:
   - build
 
 variables:
-  DOCKERFILE: Dockerfile
   KANIKO_VERSION: "v1.23.2"
+  DOCKERFILE: Dockerfile
+  # Nexus endpoints (cluster-internal) — single source of truth, no GitLab/Forgejo registry
+  NEXUS_DOCKER_GROUP: "nexus-nexus3.nexus.svc.cluster.local:8083"
+  NEXUS_DOCKER_HOSTED: "nexus-nexus3.nexus.svc.cluster.local:8082"
 
 build-image:
   stage: build
   image:
+    # Runner job image is pulled by kubelet/containerd before the pod starts;
+    # do NOT use cluster Service DNS here. Kaniko routes build-time pulls
+    # through Nexus via --registry-map once the container is running.
     name: gcr.io/kaniko-project/executor:${KANIKO_VERSION}-debug
     entrypoint: [""]
+  interruptible: true
+  parallel:
+    matrix:
+      - TARGETARCH: [amd64, arm64]
   before_script:
-    - mkdir -p /kaniko/.docker
+    - mkdir -p /kaniko
     - |
-      cat > /kaniko/.docker/config.json <<JSONEOF
+      cat > /kaniko/.docker/config.json <<JSON
       {
         "auths": {
-          "$FORGEJO_REGISTRY_URL": {
-            "username": "$FORGEJO_REGISTRY_USER",
-            "password": "$FORGEJO_REGISTRY_PASS"
+          "${NEXUS_DOCKER_HOSTED}": {
+            "username": "admin",
+            "password": "${NEXUS_PASSWORD}"
+          },
+          "${NEXUS_DOCKER_GROUP}": {
+            "username": "admin",
+            "password": "${NEXUS_PASSWORD}"
           }
         }
       }
-      JSONEOF
-    - echo "$FORGEJO_REGISTRY_CA" >> /kaniko/ssl/certs/ca-certificates.crt
+      JSON
   script:
     - |
       /kaniko/executor \
         --dockerfile=${DOCKERFILE} \
         --context=${CI_PROJECT_DIR} \
         --build-arg=TARGETOS=linux \
-        --build-arg=TARGETARCH=amd64 \
-        --destination=$FORGEJO_REGISTRY_URL/pedro/homelab-images/litellm-operator:${CI_COMMIT_SHORT_SHA} \
-        --destination=$FORGEJO_REGISTRY_URL/pedro/homelab-images/litellm-operator:latest \
-        --cache=false
+        --build-arg=TARGETARCH=${TARGETARCH} \
+        --destination=${NEXUS_DOCKER_HOSTED}/pedro/homelab-images/litellm-operator:${CI_COMMIT_SHORT_SHA}-${TARGETARCH} \
+        --destination=${NEXUS_DOCKER_HOSTED}/pedro/homelab-images/litellm-operator:latest-${TARGETARCH} \
+        --cache=true \
+        --cache-repo=${NEXUS_DOCKER_HOSTED}/${CI_PROJECT_PATH}/litellm-operator-cache-${TARGETARCH} \
+        --cache-ttl=336h \
+        --cache-copy-layers=true \
+        --cache-run-layers=true \
+        --compressed-caching=true \
+        --registry-map="docker.io=${NEXUS_DOCKER_GROUP};registry.k8s.io=${NEXUS_DOCKER_GROUP};gcr.io=${NEXUS_DOCKER_GROUP};ghcr.io=${NEXUS_DOCKER_GROUP};quay.io=${NEXUS_DOCKER_GROUP};mcr.microsoft.com=${NEXUS_DOCKER_GROUP};cgr.dev=${NEXUS_DOCKER_GROUP};mirror.gcr.io=${NEXUS_DOCKER_GROUP}" \
+        --skip-tls-verify-registry=${NEXUS_DOCKER_GROUP} \
+        --skip-tls-verify-registry=${NEXUS_DOCKER_HOSTED} \
+        --insecure \
+        --insecure-pull \
+        --snapshot-mode=redo \
+        --use-new-run=true \
+        --push-retry=3 \
+        --image-download-retry=3 \
+        --image-fs-extract-retry=2 \
+        --digest-file=/workspace/digest.txt
+  artifacts:
+    paths:
+      - /workspace/digest.txt
+    expire_in: 30 days
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - api/**/*
+        - internal/**/*
+        - cmd/**/*
+        - Dockerfile
+        - .gitlab-ci.yml
+        - go.mod
+        - go.sum
     - if: $CI_PIPELINE_SOURCE == "web"
   tags:
     - kubernetes
