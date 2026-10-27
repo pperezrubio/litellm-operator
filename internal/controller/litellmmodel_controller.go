@@ -179,6 +179,12 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			InputCostPerToken:  model.Spec.ModelInfo.InputCostPerToken,
 			OutputCostPerToken: model.Spec.ModelInfo.OutputCostPerToken,
 		}
+		// LiteLLM records pricing from litellm_params at creation only, so the
+		// costs must also ride there or the model bills at zero.
+		params.InputCostPerToken = model.Spec.ModelInfo.InputCostPerToken
+		params.OutputCostPerToken = model.Spec.ModelInfo.OutputCostPerToken
+		params.CacheReadInputTokenCost = model.Spec.ModelInfo.CacheReadInputTokenCost
+		req.LiteLLMParams = params
 	}
 
 	existingModels, err := apiClient.Models().List(ctx)
@@ -216,6 +222,7 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			req.ModelInfo = &litellm.ModelInfoReq{}
 		}
 		req.ModelInfo.ID = model.Status.LiteLLMModelID
+		req.LiteLLMParams.StripCosts()
 		if err := apiClient.Models().Update(ctx, req); err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update adopted model: %w", err)
 		}
@@ -243,6 +250,7 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 				req.ModelInfo = &litellm.ModelInfoReq{}
 			}
 			req.ModelInfo.ID = model.Status.LiteLLMModelID
+			req.LiteLLMParams.StripCosts()
 			if err := apiClient.Models().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update model: %w", err)
 			}

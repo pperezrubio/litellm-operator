@@ -52,6 +52,20 @@ type ModelParams struct {
 	StreamTimeout         *int     `json:"stream_timeout,omitempty"`
 	MaxRetries            *int     `json:"max_retries,omitempty"`
 	Tags                  []string `json:"tags,omitempty"`
+
+	// Pricing is only honoured by LiteLLM when it arrives at creation time and
+	// inside litellm_params: model_info costs are dropped, and /model/update
+	// rejects these keys. Call StripCosts() before any Update.
+	InputCostPerToken       *float64 `json:"input_cost_per_token,omitempty"`
+	OutputCostPerToken      *float64 `json:"output_cost_per_token,omitempty"`
+	CacheReadInputTokenCost *float64 `json:"cache_read_input_token_cost,omitempty"`
+}
+
+// StripCosts clears the pricing keys for a /model/update request.
+func (p *ModelParams) StripCosts() {
+	p.InputCostPerToken = nil
+	p.OutputCostPerToken = nil
+	p.CacheReadInputTokenCost = nil
 }
 
 // ModelInfoReq defines optional model info in requests.

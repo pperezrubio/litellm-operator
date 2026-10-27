@@ -100,6 +100,10 @@ type ModelInfo struct {
 	// Output cost per token in USD.
 	// +optional
 	OutputCostPerToken *float64 `json:"outputCostPerToken,omitempty"`
+
+	// Cost per cached input token read in USD.
+	// +optional
+	CacheReadInputTokenCost *float64 `json:"cacheReadInputTokenCost,omitempty"`
 }
 
 // LiteLLMModelStatus defines the observed state of LiteLLMModel.
